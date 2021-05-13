@@ -114,7 +114,7 @@ make_res_plot <- function(SeuratObj, reduction, dims){
 #Function to make a pdf (only way to plot here) of a silhoullete plot for all the spots/cells
 #with the current clustering result (uses cluster package)
 make_sil_plot_pdf <- function(file_name, SeuratObj, reduction_method_used, dims_used){
-  dist.matrix <- dist(x = Embeddings(object = se[[reduction_method_used]])[, 1:dims_used])
+  dist.matrix <- dist(x = Embeddings(object = SeuratObj[[reduction_method_used]])[, 1:dims_used])
   clusters <- SeuratObj$seurat_clusters
   sil <- silhouette(x = as.numeric(x = as.factor(x = clusters)), dist = dist.matrix)
   pdf(file=file_name)
@@ -141,31 +141,47 @@ pca_res_plot
 g2v_res_plot <- make_res_plot(pbmc3k,'g2v',10)
 g2v_res_plot
 
-#-----------------------------------------------pca with 16 clusters
-pbmc <- FindNeighbors(pbmc, 'pca', dims=1:10)
-pbmc <- FindClusters(object = pbmc, verbose = TRUE, resolution=1.8)
-make_sil_plot_pdf('pca_pbmc',pbmc,'pca',10)
+#-----------------------------------------------pca with 22 clusters
+pbmc3k <- FindNeighbors(pbmc3k, 'pca', dims=1:10)
+pbmc3k <- FindClusters(object = pbmc3k, verbose = TRUE, resolution=3)
+make_sil_plot_pdf('pca_pbmc',pbmc3k,'pca',10)
 
-allmarkers <- FindAllMarkers(pbmc, only.pos=T, logfc.threshold = 0.25, min.pct = 0.1)
-pca_heat <- plot_top_markers_heatmap(pbmc, allmarkers, 10)
+allmarkers <- FindAllMarkers(pbmc3k, only.pos=T, logfc.threshold = 0.25, min.pct = 0.1)
+pca_heat <- plot_top_markers_heatmap(pbmc3k, allmarkers, 10)
 
-pbmc <- RunUMAP(pbmc,'pca',dims = 1:10)
-pca_umap <- DimPlot(pbmc, label = TRUE, reduction = "umap")
+pbmc3k <- RunUMAP(pbmc3k,'pca',dims = 1:10)
+pca_umap <- DimPlot(pbmc3k, label = TRUE, reduction = "umap")
 
-#--------------------------------------------------g2v with 16 clusters
-pbmc <- FindNeighbors(pbmc, 'g2v', dims=1:10)
-pbmc <- FindClusters(object = pbmc, verbose = TRUE, resolution=1)
-make_sil_plot_pdf('g2v_pbmc',pbmc,'g2v',10)
+#--------------------------------------------------g2v with 22 clusters
+pbmc3k <- FindNeighbors(pbmc3k, 'g2v', dims=1:10)
+pbmc3k <- FindClusters(object = pbmc3k, verbose = TRUE, resolution=2)
+make_sil_plot_pdf('g2v_pbmc',pbmc3k,'g2v',10)
 
-pbmc <- RunUMAP(pbmc,'g2v',dims = 1:10)
-g2v_umap <- DimPlot(pbmc, label = TRUE, reduction = "umap")
+pbmc3k <- RunUMAP(pbmc3k,'g2v',dims = 1:10)
+g2v_umap <- DimPlot(pbmc3k, label = TRUE, reduction = "umap")
 
-allmarkers <- FindAllMarkers(pbmc, only.pos=T, logfc.threshold = 0.25, min.pct = 0.1)
-g2v_heat <- plot_top_markers_heatmap(pbmc, allmarkers, 10)
+allmarkers <- FindAllMarkers(pbmc3k, only.pos=T, logfc.threshold = 0.25, min.pct = 0.1)
+g2v_heat <- plot_top_markers_heatmap(pbmc3k, allmarkers, 10)
 
 #--------------------------------------------------cluster relationships heatmap
 library(caret)
 
-cm <- confusionMatrix(pbmc@meta.data$SCT_snn_res.1,pbmc@meta.data$SCT_snn_res.1.8,dnn=c('g2v','pca'))
+cm <- confusionMatrix(pbmc3k@meta.data$SCT_snn_res.2,pbmc3k@meta.data$SCT_snn_res.3,dnn=c('g2v','pca'))
+
+heatmap(cm$table, xlab='pca',ylab='g2v')
+#--------------------------------------------------Azimuth web portal integration results
+predictions <- read.delim('azimuth_pred.tsv', row.names = 1)
+pbmc3k <- AddMetaData(
+       object = pbmc3k,
+       metadata = predictions)
+
+par(mar=c(10,1,1,1))
+
+g2v_cm <- table(pbmc3k@meta.data$SCT_snn_res.2,pbmc3k@meta.data$predicted.celltype.l2)
+g2v_cm <- prop.table(g2v_cm, margin=2)
+heatmap(g2v_cm,ylab='g2v')
 
 
+pca_cm <- table(pbmc3k@meta.data$SCT_snn_res.3,pbmc3k@meta.data$predicted.celltype.l2)
+pca_cm <- prop.table(pca_cm, margin=2)
+heatmap(pca_cm,ylab='pca')

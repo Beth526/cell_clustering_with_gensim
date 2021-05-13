@@ -1,29 +1,35 @@
 library(reticulate)
 library(Seurat)
 library(ggplot2)
+library(SeuratData)
+library(cluster)
+library(purrr)
 
-#set reticulate python path to correct python path
+v#set reticulate python path to correct python path
 Sys.setenv(RETICULATE_PYTHON = '/opt/anaconda3/envs/r-reticulate/bin/python')
 #import the scGene2Vec library (after installed in r-reticulate environment) as g2v
 g2v <- import('scGene2Vec.scGene2Vec')
 
-
-
 #First, generate a SeuratObject, and find variable genes 
 #or use SCTransform to get variable genes under scale.data slot
+InstallData("pbmc3k")
+data("pbmc3k")
 
-pbmc <- Read10X('/Users/beth/Downloads/filtered_gene_bc_matrices 3/hg19/')
-pbmc <- CreateSeuratObject(pbmc)
-MT.genes <- grep("^MT-", rownames(pbmc), value=TRUE)
-pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, features = MT.genes)
+#used this previous download earlier
+#pbmc <- Read10X('/Users/beth/Downloads/filtered_gene_bc_matrices 3/hg19/')
+
+pbmc3k <- CreateSeuratObject(pbmc3k)
+
+MT.genes <- grep("^MT-", rownames(pbmc3k), value=TRUE)
+pbmc3k[["percent.mt"]] <- PercentageFeatureSet(pbmc3k, features = MT.genes)
 mt.threshold <- 10
 Count.threshold <- 6000
-pbmc <- subset(pbmc, subset = percent.mt < mt.threshold & 
+pbmc3k <- subset(pbmc3k, subset = percent.mt < mt.threshold & 
                       nCount_RNA < Count.threshold)
-pbmc <- SCTransform(pbmc)
+pbmc3k <- SCTransform(pbmc3k)
 
 #make a correlation table for the variable genes
-cor_table <- cor(t(pbmc@assays$SCT@scale.data))
+cor_table <- cor(t(pbmc3k@assays$SCT@scale.data))
 
 #use g2v to make a table of vectors for each gene from a gene2vec model
 #window = 1/2 * the number of most highly correlated genes to include in each gene's group (sentence in word2vec)
@@ -43,15 +49,15 @@ g2v_cell_embeddings_fast <- function(SeuratObj, gene2vec){
 }
 
 #get cell embeddings based on gene vectors
-cell_embeddings <- g2v_cell_embeddings_fast(pbmc, vector_table)
+cell_embeddings <- g2v_cell_embeddings_fast(pbmc3k, vector_table)
 
 #add this reduction data object to the SeuratObject
 reduction.data <- CreateDimReducObject(embeddings = cell_embeddings, 
-                                       assay = "SCT", key = "g2v")
-pbmc[["g2v"]] <- reduction.data 
+                                       assay = "SCT", key = "g2v_")
+pbmc3k[["g2v"]] <- reduction.data 
 
 #get pca reduction for comparison
-pbmc <- RunPCA(pbmc)
+pbmc3k <- RunPCA(pbmc3k)
 
 #continue with analysis (Umap, Neighbors, Clustering, ect. using new g2v reduction)
 
@@ -128,13 +134,14 @@ plot_top_markers_heatmap <- function(SeuratObj, all_markers, num_genes_per_clust
   return(p1)
 }
 
-
-pca_res_plot <- make_res_plot(pbmc,'pca',10)
+#-----------------------------------------------compare res plots
+pca_res_plot <- make_res_plot(pbmc3k,'pca',10)
 pca_res_plot
 
-g2v_res_plot <- make_res_plot(pbmc,'g2v',10)
+g2v_res_plot <- make_res_plot(pbmc3k,'g2v',10)
 g2v_res_plot
 
+#-----------------------------------------------pca with 16 clusters
 pbmc <- FindNeighbors(pbmc, 'pca', dims=1:10)
 pbmc <- FindClusters(object = pbmc, verbose = TRUE, resolution=1.8)
 make_sil_plot_pdf('pca_pbmc',pbmc,'pca',10)
@@ -145,6 +152,7 @@ pca_heat <- plot_top_markers_heatmap(pbmc, allmarkers, 10)
 pbmc <- RunUMAP(pbmc,'pca',dims = 1:10)
 pca_umap <- DimPlot(pbmc, label = TRUE, reduction = "umap")
 
+#--------------------------------------------------g2v with 16 clusters
 pbmc <- FindNeighbors(pbmc, 'g2v', dims=1:10)
 pbmc <- FindClusters(object = pbmc, verbose = TRUE, resolution=1)
 make_sil_plot_pdf('g2v_pbmc',pbmc,'g2v',10)
@@ -155,11 +163,9 @@ g2v_umap <- DimPlot(pbmc, label = TRUE, reduction = "umap")
 allmarkers <- FindAllMarkers(pbmc, only.pos=T, logfc.threshold = 0.25, min.pct = 0.1)
 g2v_heat <- plot_top_markers_heatmap(pbmc, allmarkers, 10)
 
+#--------------------------------------------------cluster relationships heatmap
 library(caret)
 
 cm <- confusionMatrix(pbmc@meta.data$SCT_snn_res.1,pbmc@meta.data$SCT_snn_res.1.8,dnn=c('g2v','pca'))
 
-test <- FindMarkers(pbmc, ident.1=0, ident.2 = c(3,5,6,7,8,9,14), only.pos=T)
 
-library(SeuratDisk)
-library(SeuratData)

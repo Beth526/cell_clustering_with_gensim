@@ -1,0 +1,1 @@
+This is a package to use highly correlated genes from single cell experiments to make gene vectors with genesim, that could be used as an alternate dimensionality reduction technique. 
